@@ -1,0 +1,361 @@
+---
+title: "Malaria Data Science"
+author: "Jean de Dieu NGIRINSHUTI"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    highlight: tango
+    number_sections: no
+    smart: yes
+    theme: flatly
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+<img src="logo.png" width=159 height=180 style="position:absolute;top:0px;right:0px;" />
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = 'center', fig.width=7, fig.height=5, 
+                      message = TRUE, warning = TRUE, comment = TRUE)
+
+library(kableExtra)
+library(knitr)
+library(tidyverse)
+library(lubridate)
+library(skimr)
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(finalfit)
+
+
+```
+ 
+## Data
+
+A randomized clinical trial was conducted to test the efficacy of a new drug on the prevention of malaria for people travelling (visiting) to regions with high malaria transmission. The study took place in a remote village in Mozambique, in which adult visitors planning to stay for at least two months were asked to participate in the trial. The participants were enrolled within 24 hours of arrival, and randomly assigned to the receive the study drug or placebo (fake drug). 
+
+The inclusion (eligibility) criteria:
+
+- Having 18 or more years of age
+- Not having malaria infection (confirmed by negative PCR test)
+- No being pregnant
+
+The trial was blinded, i.e., participant did not know if they were taking the active drug or placebo. The trial was blinded, i.e., participant did not know if they were taking the active drug or placebo. Data were collect at two time points, at enrolment and at end of follow-up period of 2 months.
+
+
+The data collected at enrolment are provided in the file `recruitment_data.csv` and contains the following variables:
+
+- `subject_id`: the unique participant identifier assigned at enrolment
+- `date_enrol`: the date of participant enrolment, format: YYYY-MM-DD
+- `date_birth`: participant's birth date, format: YYYY-MM-DD
+- `sex`: participant's sex, coded 1 (Female) and 2 (Male)
+- `weight_kg`: participant's weight in kilograms
+- `height_cm`: participate height in centimetres
+- `malaria_origin`: malaria transmission at the place of participant's origin, coded 0 (no transmission), 1 (low transmission), 2 (moderate transmission), and 3 (high transmission)
+- `treatment`: the treatment group assigned to the participant, coded 0 (placebo) and 1 (active drug)
+
+
+The data collected at the end of follow-up is in the `end_data.csv`, with the following variables:
+
+- `subject_id`: the unique participant identifier assigned at enrolment
+- `date_end`: date of the end of follow-up visit, format: YYYY-MM-DD
+- `malaria_epi`: total number of malaria episodes the participant had from the enrolment till end of follow-up
+- `bednet`: use of bed net by the participant during the study period, coded 0 (never), 1(sometimes) and 2 (always)
+
+The data files are located in the `data/orig` subfolder.
+
+The two data files where pre-processed in R to create a single final dataset for analysis, and saved to the file `merged_data.rds` in the `data/proc` subfolder.` During the pre-processing, new variables were created, namely:
+
+- `age_y`: age in years at enrolment
+- `height_m`: height in metres at enrolment
+- `bmi`: body mass index at enrolment
+- `had_malaria`: whether a participant had malaria during the study follow-up period (Yes/No)
+
+The body mass index (BMI)  is a measure of body fat based on height and weight, and is calculated as
+$$\text{BMI} = \frac{\text{w}}{\text{h}^2}$$
+where $w$ is weight in kilograms and $h$ is height in metres.
+
+## Exercises
+
+### Exercise 1
+
+Import the final (merged) dataset into your R session, assigning to an R object named `mds`. Then print the structure of the `mds` data frame. 
+
+Are the variables data types in line with their description above?
+
+#### Exercise 1 Solution: 
+
+```{r, echo=TRUE}
+
+# Load the merged data
+mds <- readRDS("data/proc/merged_data.rds")
+
+# Print the structure of the data
+str(mds)
+ 
+
+
+```
+#### **Are the Variables’ Data Types in Line with Their Description?**
+
+All variables align correctly with their descriptions. 
+
+Below is a detailed comparison of the original description vs. observed data types and whether they match.
+
+```{r}
+# Create a summary table of variable consistency
+var_summary <- data.frame(
+  Variable = c("subject_id", "date_enrol", "date_birth", "sex", "weight_kg", "height_cm", 
+               "malaria_origin", "treatment", "age_y", "height_m", "bmi", "date_end", 
+               "malaria_epi", "bednet", "had_malaria"),
+  Expected_Type = c("Character (Unique ID)", "Date (YYYY-MM-DD)", "Date (YYYY-MM-DD)",
+                    "Factor (1 = Female, 2 = Male)", "Numeric", "Integer",
+                    "Factor (0 = No, 1 = Low, 2 = Moderate, 3 = High)", 
+                    "Factor (0 = Placebo, 1 = Active)", "Numeric", "Numeric", "Numeric",
+                    "Date (YYYY-MM-DD)", "Integer", "Factor (0 = Never, 1 = Sometimes, 2 = Always)",
+                    "Factor (Yes/No)"),
+  Observed_Type = c("Character", "Date", "Date", "Factor w/ 2 levels (Female, Male)",
+                    "Numeric", "Integer", "Factor w/ 4 levels (No, Low, Moderate, High)",
+                    "Factor w/ 2 levels (Placebo, Active)", "Numeric", "Numeric", "Numeric",
+                    "Date", "Integer", "Factor w/ 3 levels (Never, Sometimes, Always)",
+                    "Factor w/ 2 levels (Yes, No)"),
+  Matches = c("Yes", " Yes", " Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes"),
+  Comments = c("Correct", "Correct", "Correct", "Uses text labels instead of numerical codes (1,2)",
+               "Correct", " Correct", "Matches expected type ",
+               "Matches expected type ", "Correct", "Correct", "Correct",
+               "Correct", "Correct", "Matches expected type ", "Correct")
+)
+
+# Display the table
+kable(var_summary, caption = "Table 1. Comparison of original description vs. Observed Variable Types") %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+
+ 
+
+### Exercise 2
+
+One thing that can affect or distort the comparison of the two treatment groups (placebo vs active drug) with regard to the outcome of interest (having malaria during the study follow-up period) is the imbalance of the participant characteristics between the two treatment groups. Construct a table containing summary statistics of participant characteristics by treatment group. The characteristics to consider are: sex, body mass index, malaria transmission at the place of origin, age, and use of bed net. Include also the p-values from the appropriate statistical tests to check whether there are significant differences (of participant characteristics) between the two groups. 
+
+Checking your output table, are there significant differences? If yes, in what characteristics?
+
+ 
+#### Exercise 2 Solution: 
+
+```{r}
+# Convert categorical variables to factors
+mds <- mds |> 
+  mutate(across(c(sex, malaria_origin, treatment, bednet, had_malaria), as.factor))
+
+# Define dependent and independent variables
+v_dep <- "treatment"  
+v_indep <- c("sex", "bmi", "malaria_origin", "age_y", "bednet")  # Variables for comparison
+
+# Create summary table using finalfit
+summary_table <- mds |> 
+  summary_factorlist(dependent = v_dep,
+                     explanatory = v_indep,
+                     p = TRUE,
+                     p_cont_para = "aov", # ANOVA for continuous variables
+                     p_cat = "chisq", #
+                     cont = "mean",
+                     total_col = FALSE,
+                     add_col_totals = TRUE,
+                     add_row_totals = TRUE,
+                     na_include = TRUE,
+                     na_to_p = FALSE,
+                     na_to_prop = FALSE,
+                     include_col_totals_percent = FALSE)
+
+# Format and display the table
+summary_table |> 
+  kable(caption = "Table 2. Summary statistics of participant characteristics by treatment group") |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+
+```
+
+
+### Interpretation
+
+Checking the output table, there are **no significant differences** between the treatment groups across all characteristics. This conclusion is based on the p-values from the statistical tests
+
+- **Sex (`p = 0.326`)**: No significant difference between the two groups.
+- **BMI (`p = 0.518`)**: No significant difference in body mass index.
+- **Malaria Origin (`p = 0.334`)**: No significant difference in the malaria transmission status at origin.
+- **Age (`p = 0.076`)**: Almost significant, but does not pass the conventional threshold (0.05).
+- **Bed Net Usage (`p = 0.442`)**: No significant difference between groups.
+
+Since all p-values are above 0.05, there is no strong evidence of systematic differences in baseline characteristics between the placebo and active drug groups.
+
+---
+ 
+
+### Exercise 3
+
+We are interested in comparing, visually, the distribution of the body mass index between the two treatment groups. Use a box plot to achieve this goal. 
+
+What are your conclusions? 
+Are there any outliers?
+
+
+#### Exercise 3 Solution: 
+
+```{r}
+ggplot(mds, aes(x = treatment, y = bmi, fill = treatment)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "BMI Distribution by Treatment Group", x = "Treatment Group", y = "Body Mass Index(BMI)") + 
+  scale_fill_manual(values = c("blue", "yellow"))
+
+
+```
+ 
+
+
+### Interpretation of the Box Plot
+
+#### **Comparison of BMI Distribution**
+- The BMI distribution between the placebo and active drug groups appears similar.
+- The medians of both groups are almost identical.
+- The interquartile ranges (IQRs), which represent the middle 50% of the data, are quite similar in both groups.
+
+#### **Presence of Outliers**
+- There are outliers present in both treatment groups.
+- These are the points above and below the whiskers in the box plot.
+- Most of the outliers appear on the higher end, indicating some participants with unusually high BMI values.
+
+#### **Conclusion**
+- The distribution of BMI is fairly consistent between the two groups.
+- There is no strong evidence of significant differences in BMI based on visual inspection.
+- The presence of outliers should be noted, but they do not drastically affect the overall interpretation.
+
+---
+
+### Exercise 4
+
+The main objective of the study was to evaluate the efficacy of the new drug (active drug) in preventing malaria infection. That is, we hypothesize that the new drug reduces the probability of getting malaria infection, compared to placebo. Some participant characteristics might be malaria risk factors (i.e., associated with malaria). It is, therefore, important to check for this associations before performing the confirmatory analysis. 
+
+Check for possible associations between the participant characteristics and the outcome (`had_malaria`). The characteristics to check are: `sex`, `bmi`, `age`, and `bednet`. Present in form of table, similar to that of the Exercise 2. Include also the p-values.
+
+What insights are getting from your output?
+
+
+#### Exercise 4 Solution: 
+
+```{r}
+
+# Convert categorical variables to factors for proper analysis
+mds <- mds %>% 
+  mutate(across(c(sex, bednet, had_malaria), as.factor))
+
+# Define variables
+v_indep <- c("sex", "bmi", "age_y", "bednet")
+v_dep <- "had_malaria"
+
+# Create a table of summary statistics by malaria outcome
+summary_table_malaria <- mds |> 
+  summary_factorlist(v_dep, v_indep, p = TRUE, p_cont_para = 'aov', 
+                     p_cat = 'chisq', add_dependent_label = FALSE,
+                     cont = "mean", total_col = FALSE, 
+                     add_col_totals = TRUE, add_row_totals = TRUE,
+                     na_include = TRUE, na_to_p = FALSE,
+                     na_to_prop = FALSE,
+                     include_col_totals_percent = FALSE)
+
+# Format and display the table
+summary_table_malaria |> 
+  kable(caption = "Table 3. Summary Statistics by Malaria Outcome") |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+``` 
+
+ 
+
+
+### Insights from the Output
+
+#### **Sex and Malaria Incidence (p = 0.808)**
+- The p-value is very high (0.808), meaning there is no significant association between sex and malaria infection.
+- This suggests that being male or female does not significantly affect the likelihood of contracting malaria.
+
+#### **BMI and Malaria Incidence (p = 0.023)**
+- The p-value is significant (0.023), meaning there is a statistically significant difference in BMI between those who had malaria and those who did not.
+- The group that had malaria had a higher mean BMI (27.09) compared to the group that did not have malaria (26.40).
+- This indicates that BMI might be a contributing factor to malaria susceptibility.
+
+#### **Age and Malaria Incidence (p = 0.195)**
+- The p-value is above 0.05 (0.195), meaning there is no significant difference in age between those who had malaria and those who did not.
+- Age does not appear to be a major factor in malaria susceptibility in this dataset.
+
+#### **Bednet Usage and Malaria Incidence (p = 0.001)**
+- The p-value is very significant (0.001), suggesting a strong association between bednet usage and malaria incidence.
+- People who never used a bed net had a higher proportion of malaria cases compared to those who used a bed net sometimes or always.
+- This reinforces the protective effect of bed net usage in preventing malaria.
+
+### **Conclusions**
+- Sex and age are not significantly associated with malaria infection.
+- Higher BMI is linked to a greater probability of contracting malaria.
+- Bed net usage is a crucial protective factor against malaria, with significantly fewer cases among those who used a bed net regularly.
+
+---
+ 
+ 
+ 
+### Exercise 5
+
+Suppose that, for answering the main research question, we are going to used multivariate logistic regression, having the variable `had_malaria` as the dependent variable and the `treatment` as one of the independent variables. Looking at your output of Exercise 4, what other independent variable would you include in the model?
+
+
+#### Exercise 5 Solution: 
+
+#### Variables for Multivariate Logistic Regression
+
+Based on the findings from **Exercise 4**, additional independent variables should be included in the model:
+
+#### **Selected Independent Variables:**
+1. **`treatment`**: The main variable of interest (Placebo vs. Active drug).
+2. **`bmi`**: **Significant predictor (`p = 0.023`)**, indicating a potential influence on malaria susceptibility.
+3. **`bednet`**: **Highly significant predictor (`p = 0.001`)**, showing a strong protective effect against malaria infection.
+
+#### **Excluded Variables:**
+- **`sex` (`p = 0.808`)**: Not significantly associated with malaria infection.
+- **`age_y` (`p = 0.195`)**: No significant difference between those who had malaria and those who did not.
+
+### **Final Model Specification:**
+The logistic regression model will include the following independent variables
+
+```{r}
+# Fit the logistic regression model
+malaria_model <- glm(had_malaria ~ treatment + bmi + bednet, data = mds, family = "binomial")
+
+#view the model Summary 
+summary(malaria_model)
+
+```
+### **Key Findings**
+- **Treatment (`treatmentActive`, p < 0.001)**: The active drug **significantly increases the odds of malaria infection** compared to the placebo.
+- **BMI (`bmi`, p = 0.037)**: Higher BMI is **associated with a lower probability** of malaria infection.
+- **Bed Net Usage (`bednetSometimes` & `bednetAlways`, p < 0.01)**: Using a bed net **significantly reduces malaria risk**, with greater protection for those who use it **always** rather than **sometimes**.
+
+### **Model Fit**
+- **AIC = 1254.6**, indicating model efficiency.
+- **Residual deviance is lower than null deviance**, suggesting the model improves prediction over a baseline model.
+
+### **Conclusion**
+- **Bed net usage is a strong protective factor.**
+- **A higher BMI is slightly associated with a lower malaria risk.**
+- **The active drug significantly increases the odds of malaria infection.**
+
+---
+
+
+## End of Assignment
+
+Thank you for reading!
+
+---
+  
